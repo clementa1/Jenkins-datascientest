@@ -1,69 +1,57 @@
 pipeline {
     agent any
-
-    environment {
-        IMAGE_NAME = "datascientest"
-        CONTAINER_NAME = "datascientest_container"
+    environment { 
+      DOCKER_ID = "dstdockerhub"
+      DOCKER_IMAGE = "datascientestapi"
+      DOCKER_TAG = "v.${BUILD_ID}.0" 
     }
-
     stages {
-        stage('Checkout') {
-            steps {
-                git 'https://github.com/clementa1/Jenkins-datascientest'
-            }
+        stage('Building') {
+          steps {
+                sh 'pip install -r requirements.txt'
+          }
         }
-
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    docker.build("${IMAGE_NAME}")
-                }
-            }
+        stage('Testing') {
+          steps {
+                sh 'python -m unittest'
+          }
         }
-
-        stage('Run Docker Container') {
-            steps {
-                script {
-                    sh "docker run -d --name ${CONTAINER_NAME} ${IMAGE_NAME}"
-                }
-            }
-        }
-
-        stage('Execute Script in Container') {
-            steps {
-                script {
-                    sh "docker exec ${CONTAINER_NAME} python3 script.py"
-                }
-            }
-        }
-
-        stage('Stop and Remove Container') {
-            steps {
-                script {
-                    sh "docker stop ${CONTAINER_NAME}"
-                    sh "docker rm ${CONTAINER_NAME}"
-                }
-            }
-        }
-    }
-
-    post {
-        always {
+          stage('Deploying') {
+          steps{
             script {
-                try {
-                    echo "Logging out from Docker..."
-                    sh 'docker logout'
-                } catch (Exception e) {
-                    echo "Docker logout skipped: ${e.getMessage()}"
-                }
-
-                try {
-                    echo "Cleaning up dangling Docker images..."
-                    sh "docker image prune -f"
-                } catch (Exception e) {
-                    echo "Image cleanup skipped: ${e.getMessage()}"
-                }
+              sh '''
+              docker rm -f jenkins
+              docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG .
+              docker run -d -p 8000:8000 --name jenkins $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
+              '''
             }
+          }
+        }
+          stage('User Acceptance') {
+            steps{
+                input {
+              message "Proceed to push to main"
+              ok "Yes"
+            }    
+            }
+          }
+          stage('Pushing and Merging'){
+            parallel {
+                stage('Pushing Image') {
+                  environment {
+                      DOCKERHUB_CREDENTIALS = credentials('docker_jenkins')
+                  }
+                  steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                      sh 'docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG'
+                  }
+                }
+            stage('Merging') {
+              steps {
+                echo 'Merging done'
+              }
+            }
+          }
         }
     }
 }
