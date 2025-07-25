@@ -80,46 +80,8 @@ pipeline {
                     try {
                         sh 'docker logout'
                     } catch (Exception e) {
-
-                input(
-                    message: 'Proceed to push to main?',
-                    ok: 'Push it!',
-                    parameters: [
-                        string(defaultValue: 'yes', description: 'Confirm action', name: 'confirmation')
-                    ]
-                )
-            }
-        }
-
-        stage('Pushing and Merging') {
-            parallel {
-                stage('Pushing Image') {
-                    steps {
-                        script {
-                            if (!env.DOCKERHUB_CREDENTIALS_USR || !env.DOCKERHUB_CREDENTIALS_PSW) {
-                                error("DockerHub credentials are missing!")
-                            }
-                        }
-                        sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
-                        sh 'docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG'
+                        echo "Docker logout skipped: ${e.getMessage()}"
                     }
-                }
-                stage('Merging') {
-                    steps {
-                        echo 'Merging done'
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                try {
-                    sh 'docker logout'
-                } catch (Exception e) {
-                    echo "Docker logout skipped: ${e.getMessage()}"
                 }
             }
         }
