@@ -2,72 +2,46 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_ID = "dstdockerhub"
-        DOCKER_IMAGE = "datascientestapi"
-        DOCKER_TAG = "v.${BUILD_ID}.0"
-        DOCKERHUB_CREDENTIALS = credentials('docker_jenkins')
+        IMAGE_NAME = "datascientest"
+        CONTAINER_NAME = "datascientest_container"
     }
 
     stages {
-        stage('Check Docker') {
+        stage('Checkout') {
             steps {
-                sh 'docker --version || echo "Docker not found!"'
+                git 'https://github.com/clementa1/Jenkins-datascientest'
             }
         }
 
-        stage('Building') {
-            steps {
-                sh 'pip install -r requirements.txt'
-            }
-        }
-
-        stage('Testing') {
-            steps {
-                sh 'python -m unittest'
-            }
-        }
-
-        stage('Deploying') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    sh '''
-                    docker rm -f datascientest_api || true
-                    docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG .
-                    docker run -d -p 8000:8000 --name datascientest_api $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
-                    '''
+                    docker.build("${IMAGE_NAME}")
                 }
             }
         }
 
-        stage('User Acceptance') {
+        stage('Run Docker Container') {
             steps {
-                input(
-                    message: 'Proceed to push to main?',
-                    ok: 'Push it!',
-                    parameters: [
-                        string(defaultValue: 'yes', description: 'Confirm action', name: 'confirmation')
-                    ]
-                )
+                script {
+                    sh "docker run -d --name ${CONTAINER_NAME} ${IMAGE_NAME}"
+                }
             }
         }
 
-        stage('Pushing and Merging') {
-            parallel {
-                stage('Pushing Image') {
-                    steps {
-                        script {
-                            if (!env.DOCKERHUB_CREDENTIALS_USR || !env.DOCKERHUB_CREDENTIALS_PSW) {
-                                error("DockerHub credentials are missing!")
-                            }
-                        }
-                        sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
-                        sh 'docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG'
-                    }
+        stage('Execute Script in Container') {
+            steps {
+                script {
+                    sh "docker exec ${CONTAINER_NAME} python3 script.py"
                 }
-                stage('Merging') {
-                    steps {
-                        echo 'Merging done'
-                    }
+            }
+        }
+
+        stage('Stop and Remove Container') {
+            steps {
+                script {
+                    sh "docker stop ${CONTAINER_NAME}"
+                    sh "docker rm ${CONTAINER_NAME}"
                 }
             }
         }
@@ -75,13 +49,19 @@ pipeline {
 
     post {
         always {
-            node {
-                script {
-                    try {
-                        sh 'docker logout'
-                    } catch (Exception e) {
-                        echo "Docker logout skipped: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    echo "Logging out from Docker..."
+                    sh 'docker logout'
+                } catch (Exception e) {
+                    echo "Docker logout skipped: ${e.getMessage()}"
+                }
+
+                try {
+                    echo "Cleaning up dangling Docker images..."
+                    sh "docker image prune -f"
+                } catch (Exception e) {
+                    echo "Image cleanup skipped: ${e.getMessage()}"
                 }
             }
         }
