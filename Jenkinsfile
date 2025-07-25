@@ -29,10 +29,13 @@ pipeline {
         }
           stage('User Acceptance') {
             steps{
-                input {
-              message "Proceed to push to main"
-              ok "Yes"
-            }    
+                input(
+  message: 'Proceed to push to main?',
+  ok: 'Push it!',
+  parameters: [
+    string(defaultValue: 'yes', description: 'Confirm action', name: 'confirmation')
+  ]
+) 
             }
           }
           stage('Pushing and Merging'){
