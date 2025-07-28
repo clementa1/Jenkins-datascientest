@@ -30,8 +30,14 @@ pipeline {
           stage('User Acceptance') {
             steps{
                 input {
-              message: Proceed to push to main
-              ok Yes
+              message: 'Proceed to push to main'
+              ok: 'Push to main'
+              parameters: [ 
+                sting(defaultValue: 'yes', description: 'Coonfirm action', name 'confirmation')
+              
+                   string(name: 'DOCKERHUB_CREDENTIALS_USR', defaultValue: '', description: 'DockerHub Username')
+                password(name: 'DOCKERHUB_CREDENTIALS_PSW', defaultValue: '', description: 'DockerHub Password')
+              }
             }    
             }
           }
